@@ -1,47 +1,55 @@
-import * as THREE from "https://unpkg.com/three@0.163.0/build/three.module.js";
+import * as THREE from 'https://unpkg.com/three@0.155.0/build/three.module.js';
+import { GLTFLoader } from 'https://unpkg.com/three@0.155.0/examples/jsm/loaders/GLTFLoader.js';
+import * as SkeletonUtils from 'https://unpkg.com/three@0.155.0/examples/jsm/utils/SkeletonUtils.js';
 
 const canvas = document.querySelector('#c');
 const renderer = new THREE.WebGLRenderer({antialias: true, canvas});
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 const camera = new THREE.PerspectiveCamera( 75, 2, 0.1, 100 );
 camera.position.set( 0, 3, -7 );
 
 const scene = new THREE.Scene();
 
-const radius = 100;
-const geometries = [ new THREE.BoxGeometry( 1, 1, 1 ), new THREE.SphereGeometry(radius, 64, 32) ];
+const manager = new THREE.LoadingManager();
+manager.onLoad = init;
+const models = {
+  plane:    { url: 'resources/plane/scene.gltf' },
+  kami: { url: 'resources/KamiPlanet/scene_cleaned.gltf' }
+};
+{
+  const gltfLoader = new GLTFLoader(manager);
+  for (const model of Object.values(models)) {
+    gltfLoader.load(model.url, (gltf) => {
+      model.gltf = gltf;
+      gltf.scene.traverse((obj) => {
+        if (obj.isMesh) {
+          obj.castShadow = true;
+          obj.receiveShadow = true;
+        }
+      });
+    });
+  }
+}
 
-const arrow1 = new THREE.ArrowHelper(
-  new THREE.Vector3(0, 0, 1), // direction (will update)
-  new THREE.Vector3(0, 0, 0), // origin
-  10,                          // length
-  0xff0000                    // color
-);
-const arrow2 = new THREE.ArrowHelper(
-  new THREE.Vector3(0, 0, 1), // direction (will update)
-  new THREE.Vector3(0, 0, 0), // origin
-  3,                          // length
-  0x0000ff                    // color
-);
-const arrow3 = new THREE.ArrowHelper(
-  new THREE.Vector3(0, 0, 1), // direction (will update)
-  new THREE.Vector3(0, 0, 0), // origin
-  3,                          // length
-  0x0000ff                    // color
-);
-scene.add(arrow1);
-scene.add(arrow2);
-scene.add(arrow3);
+function prepModelsAndAnimations() {
+  Object.values(models).forEach(model => {
+    const animsByName = {};
+    model.gltf.animations.forEach((clip) => {
+      animsByName[clip.name] = clip;
+    });
+    model.animations = animsByName;
+  });
+}
 
-const sunLight = new THREE.DirectionalLight(0xffffff, 1.5);
-sunLight.position.set(radius*8, radius*8, radius*8);
-scene.add(sunLight);
+const globals = {
+  time: 0,
+  deltaTime: 0,
+  moveSpeed: 6,
+}
 
-const fillLight = new THREE.DirectionalLight(0xffffff, 1.5);//prevColor 0x88aff
-fillLight.position.set(-radius*8, -radius*8, -radius*8);
-scene.add(fillLight);
-
-const ambient = new THREE.AmbientLight(0xaaaaaa, 1.3);//previous color 0x404040 intensity 0.5
+const ambient = new THREE.AmbientLight(0xaaaaaa, 1.5);//previous color 0x404040 intensity 0.5
 scene.add(ambient);
 
 const loader = new THREE.TextureLoader();
@@ -54,17 +62,12 @@ const texture = loader.load(
     }
 );
 
-const forward = new THREE.Vector3();
-const globals = {
-  time: 0,
-  deltaTime: 0,
-  moveSpeed: 16,
-}
 
-//previous cube color 0x44aa88
+const geometries = [ new THREE.BoxGeometry( 1, 1, 1 )]; 
+
 const instances = [ 
-   mkInstance( geometries[0], 0xcc2200),
-   mkInstance( geometries[1], 0x08844)
+   mkInstance( geometries[0], 0xaa8844),
+   mkInstance( geometries[0], 0x44aa88),
 ];
 
 function resizeRenderer( renderer, maxPixelCount=3840*2160 ) {
@@ -87,6 +90,9 @@ function resizeRenderer( renderer, maxPixelCount=3840*2160 ) {
 function mkInstance( geometry, color) {
     const material = new THREE.MeshPhongMaterial( {color} );
     const instance = new THREE.Mesh( geometry, material );
+    
+    instance.castShadow = true;
+    instance.receiveShadow = true;
     
     scene.add(instance);
     
@@ -249,28 +255,38 @@ class InputManager {
 }
 
 class Player extends Component {
-  constructor(gameObject) {
+  constructor(gameObject, pos) {
     super(gameObject);
-    this.shape = this.gameObject.addComponent( Shape, instances[0], new THREE.Vector3( 0, radius, -radius/2) );
+    const model = models.plane;
+
+    this.skin = gameObject.addComponent(SkinInstance, model);
+    this.skin.animRoot.scale.set(2,2,2);
+    this.skin.animRoot.position.set(0,-this.skin.size.y/2,0);
+    
+    this.shape = this.gameObject.addComponent( Shape, 0, pos );
+    this.planet;
+    this.velocity = globals.moveSpeed;
+    
     this.prevForward = new THREE.Vector3(0, 0, 1);
     this.horzAngle = 0;
     this.vertAngle = 0;
-    this.tempVec = new THREE.Vector3();
+    this.smoothPos = new THREE.Vector3(); 
   }
   update() {
     const {deltaTime} = globals;
-    let {moveSpeed} = globals;
     const {transform} = this.gameObject;
+    let moveSpeed = this.velocity;
+    //console.log(moveSpeed);
     
-    moveSpeed = (inputManager.keys.spacebar.down ? 48 : 16 );
-    const turnSpeed = 16/4 * deltaTime;
-                              
-    const planetPos = gameObjectManager.gameObjects.array[1].components[1].planetPos
+    const turnSpeed = moveSpeed/4 * deltaTime;
+    moveSpeed *= (inputManager.keys.spacebar.down ? 3 : 1);
+                        
+    //const planetPos = this.planet.transform.position;
+    this.smoothPos.lerp(this.planet.transform.position, 0.01);
                  
-    const pos = transform.getWorldPosition( new THREE.Vector3() );
-    this.gravityDir = planetPos.clone().sub(pos).normalize();
+    const pos = transform.position;
     
-    let upDir = this.gravityDir.clone().negate();
+    let upDir = pos.clone().sub(this.smoothPos).normalize();  
     transform.up.copy(upDir);
     
     let rightDir = new THREE.Vector3().crossVectors(upDir, this.prevForward).normalize();
@@ -296,38 +312,212 @@ class Player extends Component {
             .applyAxisAngle(upDir, this.horzAngle)
             .applyAxisAngle(rightDir, this.vertAngle)
             .normalize();
-    
+            
     transform.lookAt(pos.clone().add(rotatedForward));
     
-    transform.position.addScaledVector(rotatedForward, moveSpeed/4 * deltaTime );
+    transform.position.addScaledVector(rotatedForward, moveSpeed * deltaTime );
     
     this.prevForward = forwardDir.clone();
-    
-    arrow1.setDirection(rotatedForward);
-    arrow1.position.copy(pos);
-    
-    arrow2.setDirection(rightDir.clone().negate());
-    arrow2.position.copy(pos);
-    
-    arrow3.setDirection(rightDir);
-    arrow3.position.copy(pos);
   }
 }
 
 class Shape extends Component { 
-  constructor(gameObject, model, pos) {
+  constructor(gameObject, model, pos, radius) {
     super(gameObject);
-    this.model = model;
-    this.gameObject.transform.add(this.model);
+    if ( model != 0 ) {
+      this.model = model;
+      this.gameObject.transform.add(this.model); 
+    }
+    this.collisionRadius = radius;
     this.gameObject.transform.position.copy(pos);
   }
 }
 
-class Planet extends Component {
-  constructor(gameObject, model, pos) {
+class SkinInstance extends Component {
+  constructor(gameObject, model) {
     super(gameObject);
-    this.planetPos = pos;
-    this.shape = this.gameObject.addComponent(Shape, model, pos );
+    this.model = model;
+    this.animRoot = SkeletonUtils.clone(this.model.gltf.scene);
+    
+    const box = new THREE.Box3().setFromObject(this.animRoot);
+    this.size = new THREE.Vector3();
+    box.getSize(this.size);
+    
+    this.mixer = new THREE.AnimationMixer(this.animRoot);
+    gameObject.transform.add(this.animRoot);
+    
+    const firstClip = Object.values(this.model.animations)[0];
+    const action = this.mixer.clipAction(firstClip);
+    action.play();
+  }
+  update() {
+    this.mixer.update(globals.deltaTime);
+  }
+}
+
+class Light extends Component {
+  constructor(gameObject) {
+    super(gameObject);
+    const light =  new THREE.DirectionalLight(0xffffff, 1.5);
+    light.castShadow = true;
+    
+    light.shadow.mapSize.set(1024, 1024);
+
+    light.shadow.camera.near = 1;
+    light.shadow.camera.far  = 500;
+
+    light.shadow.camera.left   = -50;
+    light.shadow.camera.right  =  50;
+    light.shadow.camera.top    =  50;
+    light.shadow.camera.bottom = -50;
+    
+    light.position.set(0,200,0);
+    this.gameObject.transform.add(light);
+  }
+}
+
+class Planet extends Component {
+  constructor(gameObject, color, pos, radius, skin) {
+    super(gameObject);
+    
+    if (color != 0) {
+      this.sphere = new THREE.Mesh(
+        new THREE.SphereGeometry(radius, 64, 32),
+        new THREE.MeshPhongMaterial({ color: color })
+      );
+      this.sphere.castShadow = true;
+      this.sphere.receiveShadow = true;
+
+      this.gameObject.transform.add(this.sphere);
+      this.gameObject.transform.position.copy(pos);
+    
+      const roadRadius = radius * 1.01;
+      const roadHeight = radius / 3;
+    
+      this.road = new THREE.Mesh(
+        new THREE.CylinderGeometry(
+          roadRadius, roadRadius, roadHeight, 48, 1),
+        new THREE.MeshPhongMaterial({ color: 0x444444 })
+      );
+
+      this.road.castShadow = true;
+      this.road.receiveShadow = true;
+
+      // rotate so it wraps planet front-to-back
+      this.road.rotation.z = Math.PI / 2;
+      this.gameObject.transform.add(this.road);
+    }
+    
+    this.skinInstance;
+    if ( skin != undefined ) {
+      this.skinInstance = gameObject.addComponent(SkinInstance, skin);
+    }
+    this.shape = this.gameObject.addComponent(Shape, 0, pos, radius);
+    this.objects = [ this.gameObject ];
+    
+    this.enterOrbit = 3*this.shape.collisionRadius;
+    this.exitOrbit = this.enterOrbit + 2;
+    
+    this.smoothPos = new THREE.Vector3();
+  }
+  update() {
+  
+    const player = gameObjectManager.gameObjects.array[0];
+    const playerPos = player.transform.position.clone();
+    const planetPos = this.gameObject.transform.position.clone();
+    const playerPlanet = player.getComponent(Player).planet;
+    const zeroPlanet = gameObjectManager.gameObjects.array[1];
+    
+    const diff = playerPos.sub(planetPos);
+    const dist = diff.length();
+    if ( dist <= this.enterOrbit ) {
+      player.getComponent(Player).planet = this.gameObject;
+      //console.log("in", player.getComponent(Player).planet.name);
+    }
+  }
+}
+
+class Collision extends Component {
+  constructor(gameObject) {
+    super(gameObject);
+    this.dir = new THREE.Vector3();
+  }
+  update() {
+    const player = this.gameObject;
+    const objects = player.getComponent(Player).planet.getComponent(Planet).objects;
+    let playerVel = player.getComponent(Player);
+       
+    for (let i=0; i < objects.length; i++) {
+      const radius = objects[i].getComponent(Shape).collisionRadius;
+      const playerPos = player.transform.position.clone();
+      playerPos.addScaledVector(player.transform.up, -1/2);
+    
+      const diff = playerPos.sub(objects[i].transform.position);
+      const dist = diff.length();
+      if ( dist < radius ) {
+        const collisionDist = radius - dist;
+        const pushDir = diff.normalize();
+        player.transform.position.addScaledVector( pushDir, collisionDist );     
+        player.transform.getWorldDirection(this.dir);
+        playerVel.velocity *= ( playerVel.velocity > 1 ? 0.999 : 1 );
+      } else if (i==0 && playerVel.velocity<globals.moveSpeed) { playerVel.velocity *= 1.002 }      
+    }  
+  }
+}
+
+class Item extends Component {
+  constructor(gameObject, model, pos, angle, radius, planet, skin) { 
+    super(gameObject);
+    this.skinInstance;
+    if ( skin != undefined ) {
+      this.skinInstance = gameObject.addComponent(SkinInstance, skin);
+    }
+    
+    this.shape = this.gameObject.addComponent(Shape, model, pos, radius);
+    this.item = this.gameObject.transform;
+    
+    this.planet = planet;
+    this.planet.getComponent(Planet).objects.push(this.gameObject);
+    
+    let itemPos = this.gameObject.transform.position.clone();
+    const planetPos = this.planet.transform.position;
+    
+    let upDir = itemPos.clone().sub(planetPos).normalize();
+    this.gameObject.transform.up.copy(upDir);
+   
+    itemPos.addScaledVector( upDir, -1/2);
+    
+    const diff = itemPos.clone().sub(planetPos);
+    const dist = diff.length() - this.planet.getComponent(Shape).collisionRadius;
+    const moveDir = diff.normalize().negate()
+    this.gameObject.transform.position.addScaledVector( moveDir , dist );
+    
+    let lookDir = new THREE.Vector3().crossVectors(upDir, new THREE.Vector3(0,1,0)).normalize();
+    lookDir.applyAxisAngle(upDir, angle);
+    
+    this.gameObject.transform.lookAt(itemPos.add(lookDir));
+    
+    this.arrow1 = new THREE.ArrowHelper(
+    new THREE.Vector3(0, 0, 1), // direction (will update)
+    new THREE.Vector3(0, 0, 0), // origin
+    3,                          // length
+    0x0000ff                    // color
+    );
+    this.arrow2 = new THREE.ArrowHelper(
+    new THREE.Vector3(0, 0, 1), // direction (will update)
+    new THREE.Vector3(0, 0, 0), // origin
+    3,                          // length
+    0x0000ff                    // color
+    );
+    
+    scene.add(this.arrow1);
+    scene.add(this.arrow2);  
+    
+    this.arrow1.setDirection(upDir);
+    this.arrow1.position.copy(this.gameObject.transform.position);
+    
+    //this.arrow2.setDirection(lookDir.negate());
+    //this.arrow2.position.copy(this.gameObject.transform.position);
   }
 }
 
@@ -364,20 +554,59 @@ class Camera extends Component {
   }
 }
 
+const kamiPos = new THREE.Vector3(0, -60, 0);
+const planet1Pos = new THREE.Vector3(0, 0, 0);
+
+const kamiRadius = 12;
+const planet1Radius = 12;
+
+const kamiScale = kamiRadius*0.77;
+const kamiOffsetY = kamiRadius*-1.235;
+const kamiOffsetZ = kamiRadius*-0.004;
+
+const playerPos = planet1Pos.clone().add( new THREE.Vector3( 0, planet1Radius, 0 ) );
+
 const gameObjectManager = new GameObjectManager();
 const inputManager = new InputManager();
 
-let gameObj = gameObjectManager.createGameObject(scene, 'player');
-gameObj.addComponent(Player);
+function init() {
+  prepModelsAndAnimations();
+  
+  {
+  const playerObj = gameObjectManager.createGameObject(scene, 'player');
 
-gameObj = gameObjectManager.createGameObject(scene, 'planet');
-gameObj.addComponent(Planet, instances[1], new THREE.Vector3(0, 0, 0));
+  playerObj.addComponent(Player, playerPos);
+  playerObj.addComponent(Collision);
+  playerObj.addComponent(Light);
+  
+  const kamiObj = gameObjectManager.createGameObject(scene, 'KamiPlanet');
+  kamiObj.addComponent(Planet, 0, kamiPos, kamiRadius, models.kami);
+  kamiObj.getComponent(SkinInstance).animRoot.scale.set(kamiScale,kamiScale,kamiScale);
+  kamiObj.getComponent(SkinInstance).animRoot.position.set(-0.1,kamiOffsetY,kamiOffsetZ);
+  
+  const planet1Obj = gameObjectManager.createGameObject(scene, 'planet1');
+  planet1Obj.addComponent(Planet, 0x008844, planet1Pos, planet1Radius);
 
-gameObjectManager.update();
-const player = gameObjectManager.gameObjects.array[0];
+  playerObj.getComponent(Player).planet = planet1Obj;
+  
+  gameObjectManager.update();
 
-gameObj = gameObjectManager.createGameObject(scene, 'camera');
-gameObj.addComponent(Camera, player, new THREE.Vector3( 0, 3, -7));
+  const cameraObj = gameObjectManager.createGameObject(scene, 'camera');
+  cameraObj.addComponent(Camera, playerObj, new THREE.Vector3( 0, 3, -7));
+
+  let tempPos = planet1Pos.clone().add(new THREE.Vector3(-15, 50, 40) );
+  let randomAngle = Math.random() * Math.PI * 2;
+
+  let gameObj = gameObjectManager.createGameObject(scene, 'house1');
+  gameObj.addComponent(Item, instances[0], tempPos, randomAngle, 1.5, planet1Obj);
+
+  tempPos = planet1Pos.clone().add(new THREE.Vector3(15, 50, 40));
+  randomAngle = Math.random() * Math.PI * 2;
+
+  gameObj = gameObjectManager.createGameObject(scene, 'house2');
+  gameObj.addComponent(Item, instances[1], tempPos, randomAngle, 1.5, planet1Obj);
+  }
+}
 
 let then = 0;
 function animate( now ) {
@@ -394,19 +623,6 @@ function animate( now ) {
 
     gameObjectManager.update();
     inputManager.update();
-    
-    const player = gameObjectManager.gameObjects.array[0];
-    const planet = gameObjectManager.gameObjects.array[1];
-    
-    let dist = player.transform.position.clone().sub(player.transform.up);
-    dist = dist.distanceTo(planet.transform.position);
-    
-    if ( dist <= radius ) {
-      const collisionDist = Math.abs(dist - radius);
-      const upDir = player.transform.up.clone();
-      const pushVec = upDir.multiplyScalar(collisionDist);
-      player.transform.position.add(pushVec);
-    }
 
     renderer.render( scene, camera );
 }
