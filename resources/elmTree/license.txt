@@ -1,0 +1,11 @@
+Model Information:
+* title:	Elm Tree - Low Poly
+* source:	https://sketchfab.com/3d-models/elm-tree-low-poly-1445aa109a344dc6963a123fd0fe48ac
+* author:	Alan Zimmerman (https://sketchfab.com/nenjo)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Elm Tree - Low Poly" (https://sketchfab.com/3d-models/elm-tree-low-poly-1445aa109a344dc6963a123fd0fe48ac) by Alan Zimmerman (https://sketchfab.com/nenjo) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

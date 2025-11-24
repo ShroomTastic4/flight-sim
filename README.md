@@ -9,8 +9,6 @@ No installation needed — works in any modern browser.
 
 🕹️ Controls
 
-Movement
-
 W / Up Arrow — Pitch Down
 
 S / Down Arrow — Pitch Up
@@ -19,10 +17,6 @@ A / Left Arrow — Turn Left
 
 D / Right Arrow — Turn Right
 
-Speed
+Spacebar — Speed Boost
 
-Spacebar — Boost
-
-Mouse
-
-Move the mouse to rotate the camera around the player.
+Mouse - Rotate camera around the player.

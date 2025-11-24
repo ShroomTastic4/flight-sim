@@ -1,0 +1,11 @@
+Model Information:
+* title:	Korean Bakery
+* source:	https://sketchfab.com/3d-models/korean-bakery-f175d042502345fb99df3e5e60065eec
+* author:	Bjarne Stokhof (https://sketchfab.com/stokhuis)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Korean Bakery" (https://sketchfab.com/3d-models/korean-bakery-f175d042502345fb99df3e5e60065eec) by Bjarne Stokhof (https://sketchfab.com/stokhuis) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
